@@ -1,0 +1,5 @@
+sourcefile="student_ip.csv"
+host="127.0.0.1"
+port="6379"
+keyname="IpQueue"
+outdir="/Users/zhy/duobei_result/"
