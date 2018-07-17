@@ -38,7 +38,7 @@ int main(void)
 //数据预处理，过滤ip前24位相同的并push到任务队列
 bool FilterIpList(string filename, set<string> & ipSet)
 {
-    ifstream fin(filename);
+    ifstream fin(filename.c_str(), ios::in);
     if (!fin.is_open())
     {
         cout << "open student_ip.csv fialed!\n";

@@ -46,14 +46,14 @@ int main(void)
     }
     // string cmd = "touch " + path + accessible;
     // system(cmd.c_str());
-    fout_acc.open(path + accessible);
+    fout_acc.open((path + accessible).c_str());
     //cout << path + accessible << endl;
     if (!fout_acc.is_open())
     {
         cout << "open accfile failed!" << endl; 
         return 0;
     }
-    fout_unacc.open(path + unaccessible);
+    fout_unacc.open((path + unaccessible).c_str());
     if (!fout_unacc.is_open())
     {
         cout << "open unaccfile failed!" << endl; 
