@@ -25,7 +25,7 @@ boost::uuids::uuid uid = boost::uuids::random_generator()();
 const string uid_str = boost::uuids::to_string(uid);
 const string accessible = TaskQueue::sOutDir + "AccIp_" + uid_str + ".csv";
 const string unaccessible = TaskQueue::sOutDir + "UnaccIp_" + uid_str + ".csv";
-const int TestSize = 5;
+// const int TestSize = 5;
 void PingOne(string ip_netnum, ofstream & fout_acc, ofstream & fout_unacc);
 
 int main(void)
@@ -46,40 +46,43 @@ int main(void)
     }
     // string cmd = "touch " + path + accessible;
     // system(cmd.c_str());
-    fout_acc.open((path + accessible).c_str());
     //cout << path + accessible << endl;
-    if (!fout_acc.is_open())
-    {
-        cout << "open accfile failed!" << endl; 
-        return 0;
-    }
-    fout_unacc.open((path + unaccessible).c_str());
-    if (!fout_unacc.is_open())
-    {
-        cout << "open unaccfile failed!" << endl; 
-        return 0;
-    }
+    
     string getip;
+    string pathAcc = path + accessible;
+    string pathUacc = path + unaccessible;
     TaskQueue * customer = new TaskQueue();
     if (!customer->connect())
     {
         delete customer;
         return 0;
     }
-    cout << "Start...\n";
-    int count = 0;
-    while (!(getip = customer->pop()).empty())
+    //
+    fout_acc.open(pathAcc.c_str(), ios::app);
+    if (!fout_acc.is_open())
     {
-        if (count == TestSize)
-        {
-            break;
+        cout << "open accfile failed!" << endl; 
+        return 0;
+    }
+    fout_unacc.open(pathUacc.c_str(), ios::app);
+    if (!fout_unacc.is_open())
+    {
+        cout << "open unaccfile failed!" << endl; 
+        return 0;
+    }
+    cout << "Start...\n";;
+    while (1)
+    {
+        getip = customer->pop();
+        if (getip.empty()) {
+            continue;
         }
-        count++;
         PingOne(getip, fout_acc, fout_unacc);
     }
     fout_acc.close();
     fout_unacc.close();
 
+    delete customer;
     return 0;
 }
 
@@ -110,7 +113,9 @@ void PingOne(string ip_netnum, ofstream & fout_acc, ofstream & fout_unacc)
     if (fp == NULL)
     {
         cout << "execute command failed!" << endl;
-        return;
+        string tmp = ip_netnum + ".0/24\n";
+        cout << "unaccessible: " << tmp << endl;
+        fout_unacc << tmp;
     }
     else
     {
@@ -135,16 +140,18 @@ void PingOne(string ip_netnum, ofstream & fout_acc, ofstream & fout_unacc)
         if (flag)
         {        
             tmp += "\n";
-            //cout << "accessible: " << tmp << endl;
+            cout << "accessible: " << tmp << endl;
             fout_acc << tmp;
         }
         else
         {
             string tmp = ip_netnum + ".0/24\n";
-            //cout << "unaccessible: " << tmp << endl;
+            cout << "unaccessible: " << tmp << endl;
             fout_unacc << tmp;
         }
     }
+    fout_acc.flush();
+    fout_unacc.flush();
     // gettimeofday(&end, NULL);
     // timer = 1000000 * (end.tv_sec-start.tv_sec) + end.tv_usec - start.tv_usec;
     // printf("time cost: %ld us\n", timer);

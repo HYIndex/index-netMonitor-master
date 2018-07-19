@@ -5,7 +5,7 @@
 #include <set>
 
 using namespace std;
-const int TestCount = 1000;
+// const int TestCount = 1000;
 bool FilterIpList(string filename, set<string> & ipSet);
 
 int main(void)
@@ -19,19 +19,25 @@ int main(void)
     {
         return 0;
     }
-
+    cout << ipSet.size() << endl;
     TaskQueue * producer = new TaskQueue();
     if (!producer->connect())
     {
         delete producer;
         return 0;
     }
+    cout << "start push...\n";
     for (set<string>::iterator iter = ipSet.begin(); iter != ipSet.end(); iter++)
     {
         producer->push(*iter);
     }
+    cout << "end\n";
+    
     delete producer;
-
+    while (1)
+    {
+        continue;
+    }
     return 0;
 }
 
@@ -47,15 +53,11 @@ bool FilterIpList(string filename, set<string> & ipSet)
     string line, ip;
     int pos;
 
-    int count = 1;
     while (getline(fin, line))
     {        
         pos = line.rfind('.');
         ip = line.substr(0, pos);
         ipSet.insert(ip);
-        if (count++ == TestCount) {
-            break;
-        }
         // 测试读取数据
         // cout << "Raw Ip: *" << line << '*' << ", After split: *" << ip << '*' << endl;
     }
