@@ -34,10 +34,10 @@ int main(void)
     cout << "end\n";
     
     delete producer;
-    // while (1)
-    // {
-    //     continue;
-    // }
+    while (1)
+    {
+        continue;
+    }
     return 0;
 }
 

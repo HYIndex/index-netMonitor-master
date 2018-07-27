@@ -1,5 +1,5 @@
 sourcefile="student_ip.csv"
-host="127.0.0.1"
+host="172.31.44.9"
 port="6379"
 keyname="IpQueue"
-outdir="/var/duobei/restult/"
+outdir="/var/duobei/result/"

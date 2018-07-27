@@ -1,0 +1,5 @@
+sourcefile="student_ip.csv"
+host="172.31.44.9"
+port="63908"
+keyname="IpQueue"
+outdir="/var/duobei/result/"

@@ -71,10 +71,8 @@ public:
  
     void push(string value)
     {
-        //cout << "push begin" << endl;
         this->_reply = (redisReply*)redisCommand(this->_connect, "LPUSH %s %s", TaskQueue::sKeyName.c_str(), value.c_str());
         //printf("push res: %s %lld\n", this->_reply->str, this->_reply->integer);
-        //cout << "push end" << endl;
     }
 
     static void initConfig()
