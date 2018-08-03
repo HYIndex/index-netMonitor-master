@@ -2,64 +2,43 @@
 #-*- coding: utf-8 -*-
 
 from subprocess import Popen, PIPE
-from influxdb import InfluxDBClient
-from time import time
-from multiprocessing import pool
-import string, os
+import time
+from multiprocessing import Pool
+from threading import Thread
+import string, os, fcntl
 from configparser import ConfigParser
+import logging
+import logging.handlers
 
-CMD = 'fping -l -e '
+CMD = 'fping -l -i 1 -e '
 TargetIpSet = []
+THREAD_NUM = 6
 
 config = {
-    'db_host': None,
-    'db_port': None,
-    'db_dbname': None,
-    'db_mmt': None,
+    'cf_hostname' : None,
     'cf_srcfile': None,
-    'cf_pszie': None
+    'cf_outpath': None,
+    'cf_psize': None
 }
 
-class DBManager(object):
-    '''a manager of influxdb for create db or insert points'''
-    def __init__(self, host='localhost', port=8086, dbname='PingResult'):
-        self.user = 'root'
-        self.__passwd = 'root'
-        self.client = InfluxDBClient(host, port, self.user, self.__passwd, dbname)
-        self.client.create_database(dbname)
-        print('create database: {}'.format(dbname))
-    
-    def addPoint(self, mmt='result_1', ip='0.0.0.0', rtt=0.0):
-        '''add point to influxdb, measurement is mmt'''
-        body_json = [
-            {
-                "measurement": mmt,
-                "tags": {
-                    "ip": ip,
-                },
-                "fields": {
-                    "rtt": rtt,
-                }
-            }
-        ]
-        self.client.write_points(body_json)
-    
-    def query(self, sql):
-        return self.client.query(sql)
-
-    def dropDb(self, dbname):
-        self.client.drop_database(dbname)
+def nonBlockRead(output):
+    fd = output.fileno()
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    try:
+        return str(output.read())
+    except:
+        return ''
 
 def LoadConfig(conf='config.ini'):
     cp = ConfigParser()
     cp.read(conf)
     global config
-    config['db_host'] = cp.get('influxdb', 'host')
-    config['db_port'] = int(cp.get('influxdb', 'port'))
-    config['db_dbname'] = cp.get('influxdb', 'dbname')
-    config['db_mmt'] = cp.get('influxdb', 'measurement')
+    config['cf_hostname'] = cp.get('config', 'hostname')
     config['cf_srcfile'] = cp.get('config', 'srcfile')
+    config['cf_outpath'] = cp.get('config', 'outpath')
     config['cf_psize'] = int(cp.get('config', 'psize'))
+    print(config)
 
 # 加载ip文件到内存
 def LoadData(fname='accip_1w.csv'):
@@ -68,24 +47,51 @@ def LoadData(fname='accip_1w.csv'):
         for line in fin.readlines():
             TargetIpSet.append(line.strip())
 
+def createLogger(prefix):
+    # logging.basicConfig()
+    logger = logging.getLogger(prefix)
+    logger.setLevel(logging.INFO)
+    # 定义日志输出格式
+    formatter  = logging.Formatter('%(message)s')
+    # 创建TimedRotatingFileHandler处理对象
+    # 间隔5(S)创建新的名称为myLog%Y%m%d_%H%M%S.log的文件，并一直占用Log文件。
+    fileshandle = logging.handlers.TimedRotatingFileHandler(prefix+".log", when='D', interval=1)
+    # 设置日志文件后缀，以当前时间作为日志文件后缀名。
+    fileshandle.suffix = "%Y%m%d_%H%M%S.log"
+    # 设置日志输出级别和格式
+    fileshandle.setLevel(logging.INFO)
+    fileshandle.setFormatter(formatter)
+    logger.addHandler(fileshandle)
+    return logger
+
 def Ping(kwds):
     start = kwds['start']
     end = kwds['end']
-    mmt = kwds['mmt']
-    # create and initial database
-    dbm = DBManager(config['db_host'], config['db_port'], config['db_dbname'])
-    if dbm:
-        print('success create dbm at: {}:{}'.format(config['db_host'], config['db_port']))
-    measurement = mmt
+    filename = kwds['filename']
+    # fout = open(filename, "w")
+    logger = createLogger(filename)
+    # if not fout:
+    #     print('open {} failed!'.format(filename))
     # exectue cmd
-    print('start:{}, end:{}'.format(start, end))
+    # print('start:', start, 'end', end)
     argIps = ' '.join(TargetIpSet[start : end])
     cmd = CMD + argIps
-    subp = Popen(cmd, shell=True, stdout=PIPE)
-    # get result and add to database
+    subp = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    # print(subp.stdout.readline())
+    # print('flag1')
+    i = 1
+    ctlCount = 1
     while subp.poll() is None:
         resStr = ''
+        errStr = ''
+        # t1 = time()
         resStr = str(subp.stdout.readline())
+        if ctlCount == 100:
+            errStr = nonBlockRead(subp.stderr)
+            ctlCount = 1
+        else:
+            ctlCount += 1
+        # t2 = time()
         # print(resStr)
         pos = resStr.find("'")
         if pos == -1:
@@ -98,13 +104,56 @@ def Ping(kwds):
         if pos == -1:
             continue
         npos = resStr.find(" ms")
+       
         try:
             rtt = float(resStr[pos+7 : npos].strip())
         except Exception as e:
             print('Exception:', e)
-        dbm.addPoint(measurement, ip, rtt)
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        point = "{}, {}, {}, {}(ms)".format(config['cf_hostname'], ip, now, rtt)
+        # print(point)
+        errpoint = None
+        if errStr:
+            pos = errStr.find("from ")
+            if pos != -1:
+                npos = errStr.find(" for")
+                if npos != -1:
+                    ip = errStr[pos+5 : npos]
+                    errpoint = "{}, {}, {}, {}(ms)".format(config['cf_hostname'], ip, now, -1)
+        if errpoint:
+            logger.info(errpoint)
+        logger.info(point)
+        if i == 1000:
+            break
+        else:
+            i += 1
+    # print(subp.returncode)
 
-    print(subp.returncode)
+def Process(kwds):
+    start = kwds['start']
+    end = kwds['end']
+    outfile = kwds['outfile']
+    fname = config['cf_outpath'] + outfile
+    print('P : start:{}, end:{}, outfile:{}'.format(start, end, fname))
+    gap = int((end - start) / THREAD_NUM)
+    taskList_t = []
+    for i in range(THREAD_NUM):
+        filename = fname + str(i+1)
+        if i == (THREAD_NUM - 1):            
+            taskList_t.append({'start':start+i*gap, 'end':end, 'filename':filename})
+        else:
+            taskList_t.append({'start':start+i*gap, 'end':start+(i+1)*gap, 'filename':filename})
+    thds = []
+    for task in taskList_t:
+        t = Thread(target=Ping, args=(task,))
+        thds.append(t)
+        t.start()
+        # print(t, " start...")
+    for t in thds:
+        t.join()
+        # print(t, ' join...')
+    # exit(0)
+    
 
 def main():
     LoadConfig()
@@ -119,16 +168,20 @@ def main():
             rangeGroups.append((i*gap, length))
         else:
             rangeGroups.append((i*gap, (i+1)*gap))
-    p = pool.Pool(pSize)
+    p = Pool(pSize)
     taskList = []
+    i = 1
+    t1 = time.time()
     for s, t in rangeGroups:
-        taskList.append({'start':s, 'end':t, 'mmt':config['db_mmt']})
-
-    p.map_async(Ping, taskList)
+        filename = "result_" + str(i)
+        taskList.append({'start':s, 'end':t, 'outfile':filename})
+        i += 1
+    # print(taskList)
+    p.map_async(Process, taskList)
     print('Waiting for all processes done...')
     p.close()
     p.join()
     print('All subprocesses done.')
-
+    print("total: {}".format(time.time()-t1))
 if __name__ == '__main__':
     main()
