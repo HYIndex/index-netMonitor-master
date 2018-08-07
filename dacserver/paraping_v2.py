@@ -48,7 +48,7 @@ def LoadData(fname='accip_1w.csv'):
             TargetIpSet.append(line.strip())
 
 def Write(fname, points, lock):
-    now = time.strftime("%Y%m%d%H", time.localtime())
+    now = time.strftime("%Y%m%d%H%M%S", time.localtime())
     filename = "{}_{}.csv".format(fname, now)
     lock.acquire()
     with open(filename, 'a') as fw:
@@ -58,7 +58,7 @@ def Write(fname, points, lock):
             fw.flush()   
     timer = Timer(config['cf_interval'], Write, args=(fname, points, lock))
     timer.start()
-    points = {}
+    points.clear()
     lock.release()
 
 def Ping(kwds):
