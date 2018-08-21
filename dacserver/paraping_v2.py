@@ -70,18 +70,19 @@ def Write(fname, points, lock, sizeQueue, minQueue):
                 if length < minrowsize:
                     minrowsize = length
         lock.release()
-        print('come here 0, minrowsize: ', minrowsize)
+        # print('come here 0, minrowsize: ', minrowsize)
         # 发送到主线程中， 集中求出所有线程的最小值
         sizeQueue.put(minrowsize)
         minimum = 0
-        print('come here 1')
-        # 
+        # print('come here 1')
+        # 循环请求主线程计算的最小值，直到获得一个为止
         while True:
             if not minQueue.empty():
                 minimum = minQueue.get()
                 break
-        print('come here 2, minimum', minimum)
+        # print('come here 2, minimum', minimum)
         lock.acquire()
+        # 将每行的列数按最小值截取成相同大小， 小于门限值的忽略不写入
         for key, value in points.items():
             if len(value) < minimum:
                 #line = "{}, {}\n".format(key, ", ".join(value))
@@ -96,6 +97,7 @@ def Write(fname, points, lock, sizeQueue, minQueue):
     points.clear()
     lock.release()
 
+# ping数据线程函数
 def Ping(sizeQueue, minQueue, kwds):
     start = kwds['start']
     end = kwds['end']
@@ -162,6 +164,7 @@ def Ping(sizeQueue, minQueue, kwds):
         #     i += 1
     # print(subp.returncode)
 
+# 进程函数
 def Process(kwds):
     start = kwds['start']
     end = kwds['end']
@@ -173,6 +176,7 @@ def Process(kwds):
     gap = int((end - start) / THREAD_NUM)
     taskList_t = []
     pointLock = Lock()
+    # 将任务切割均分到每个线程
     for i in range(THREAD_NUM):
         filename = fname + str(i+1)
         if i == (THREAD_NUM - 1):            
@@ -189,7 +193,8 @@ def Process(kwds):
         t.join()
         # print(t, ' join...')
     # exit(0)
-    
+
+# 主线程函数，找所有线程的最小值
 def sizemanager(sizeQueue, minQueue):
     while True:
         if sizeQueue.full():
@@ -203,8 +208,8 @@ def sizemanager(sizeQueue, minQueue):
                 minQueue.put(minimum)     
         # time.sleep(0.001)    
             
-
 def main():
+    # 加载配置
     LoadConfig()
     LoadData(config['cf_srcfile'])
     pSize = config['cf_psize']
@@ -212,6 +217,7 @@ def main():
     print('file length:'+str(length))
     rangeGroups = []
     gap = int(length / pSize)
+    # 将任务切割，均分到每个进程
     for i in range(pSize):
         if i == (pSize - 1):
             rangeGroups.append((i*gap, length))
@@ -231,6 +237,7 @@ def main():
         taskList.append({'start':s, 'end':t, 'outfile':filename, 'sizeQue':sizeQueue, 'minQue':minQueue})
         i += 1
     print(taskList)
+    # 异步启动进程，进程数可以大于cpu核数，由操作系统进行调度
     result = p.map_async(Process, taskList)
     result.get()
     print('Waiting for all processes done...')
