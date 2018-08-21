@@ -22,6 +22,7 @@ config = {
     'cf_minrowsize': None
 }
 
+# 将从标准错误输出的读取设置成非阻塞
 def nonBlockRead(output):
     fd = output.fileno()
     fl = fcntl.fcntl(fd, fcntl.F_GETFL)
@@ -31,6 +32,7 @@ def nonBlockRead(output):
     except:
         return ''
 
+# 加载配置文件
 def LoadConfig(conf='config.ini'):
     cp = ConfigParser()
     cp.read(conf)
@@ -52,11 +54,13 @@ def LoadData(fname='accip_1w.csv'):
         for line in fin.readlines():
             TargetIpSet.append(line.strip())
 
+# 写文件线程， 每小时写一次
 def Write(fname, points, lock, sizeQueue, minQueue):
     now = time.strftime("%Y%m%d%H%M%S", time.localtime())
     filename = "{}_{}.csv".format(fname, now)
     lock.acquire()
     with open(filename, 'a') as fw:
+        # 找到本线程的列数的最小值
         minrowsize = 99999
         for key, value in points.items():
             length = len(value)
@@ -66,11 +70,12 @@ def Write(fname, points, lock, sizeQueue, minQueue):
                 if length < minrowsize:
                     minrowsize = length
         lock.release()
-        #TODO: put to pulic queue
         print('come here 0, minrowsize: ', minrowsize)
+        # 发送到主线程中， 集中求出所有线程的最小值
         sizeQueue.put(minrowsize)
         minimum = 0
         print('come here 1')
+        # 
         while True:
             if not minQueue.empty():
                 minimum = minQueue.get()
